@@ -54,9 +54,9 @@ Tell the user which model you chose and why (one short sentence).
 Before generating any image, ask the user for:
 
 1. **Resolution** — suggest these options:
-   - 1K (1024px on the long edge) — fast, good for drafts
-   - 2K (2048px on the long edge) — balanced quality
-   - 4K (4096px on the long edge) — highest quality, slower
+   - 1K (1024px) — fast, good for drafts
+   - 2K (2048px) — balanced quality
+   - 4K (4096px) — highest quality, slower
 
 2. **Aspect ratio** — suggest common options:
    - `1:1` — square (social media posts, icons)
@@ -68,7 +68,7 @@ Before generating any image, ask the user for:
 
 If the user says "default" or doesn't care, use **2K** and **16:9**.
 
-For image editing, also ask if they want to keep the original resolution or change it.
+For image editing, also ask if they want to keep the original resolution/aspect ratio or change it.
 
 ## Generation Flow
 
@@ -81,7 +81,7 @@ Once you have the prompt, model, resolution, and aspect ratio:
 node "<skill-path>/scripts/generate.mjs" \
   --prompt "your optimized prompt here" \
   --model "gemini-2.0-flash-exp-image-generation" \
-  --size "2048" \
+  --size "2K" \
   --aspect-ratio "16:9" \
   --output "./descriptive-filename.png"
 ```
@@ -91,12 +91,9 @@ Replace `<skill-path>` with the actual path to this skill's directory.
 3. Run the command via Bash
 4. Report the result: file path and which model was used
 
-### Size Mapping
+### Size Values
 
-Map the user's resolution choice to the `--size` parameter (long-edge pixels):
-- 1K → `1024`
-- 2K → `2048`
-- 4K → `4096`
+Pass the size label directly: `1K`, `2K`, or `4K`.
 
 ## Image Editing Flow
 
@@ -110,7 +107,7 @@ When the user wants to edit an existing image:
 node "<skill-path>/scripts/generate.mjs" \
   --prompt "edit instructions here" \
   --model "gemini-2.0-flash-exp-image-generation" \
-  --size "2048" \
+  --size "2K" \
   --aspect-ratio "16:9" \
   --input-image "./original.png" \
   --output "./original-edited.png"

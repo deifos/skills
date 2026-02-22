@@ -6,11 +6,11 @@
  *
  * Usage:
  *   node generate.mjs --prompt "a red fox" --model "gemini-2.0-flash-exp-image-generation" \
- *     --size 2048 --aspect-ratio "16:9" --output "./fox.png"
+ *     --size "2K" --aspect-ratio "16:9" --output "./fox.png"
  *
  * For image editing:
  *   node generate.mjs --prompt "make the sky dramatic" --model "gemini-2.0-flash-exp-image-generation" \
- *     --size 2048 --aspect-ratio "16:9" --input-image "./photo.png" --output "./photo-edited.png"
+ *     --size "2K" --aspect-ratio "16:9" --input-image "./photo.png" --output "./photo-edited.png"
  */
 
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
@@ -89,10 +89,21 @@ if (!args.prompt) {
 }
 
 const model = args.model || "gemini-2.0-flash-exp-image-generation";
-const size = parseInt(args.size, 10) || 2048;
+const size = args.size || "2K";
 const aspectRatio = args["aspect-ratio"] || "16:9";
 const outputPath = resolve(args.output || "./generated-image.png");
 const inputImagePath = args["input-image"] ? resolve(args["input-image"]) : null;
+
+// ---------------------------------------------------------------------------
+// Map size labels to API values
+// ---------------------------------------------------------------------------
+function sizeToLabel(size) {
+  const s = String(size).toUpperCase();
+  if (s === "1K" || s === "1024") return "1K";
+  if (s === "2K" || s === "2048") return "2K";
+  if (s === "4K" || s === "4096") return "4K";
+  return "2K";
+}
 
 // ---------------------------------------------------------------------------
 // Build the request payload
@@ -130,11 +141,10 @@ function buildPayload(prompt, inputImagePath, size, aspectRatio) {
   return {
     contents: [{ parts }],
     generationConfig: {
-      responseModalities: ["image", "text"],
-      imageGenerationConfig: {
-        numberOfImages: 1,
+      responseModalities: ["TEXT", "IMAGE"],
+      imageConfig: {
         aspectRatio,
-        personGeneration: "ALLOW_ADULT",
+        imageSize: sizeToLabel(size),
       },
     },
   };
