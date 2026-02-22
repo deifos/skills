@@ -18,8 +18,7 @@ You are an expert image generation assistant powered by Google's Gemini image mo
 Before doing anything, verify the API key is available. The script checks for `GEMINI_API_KEY` in this order:
 
 1. Environment variable (`GEMINI_API_KEY`)
-2. `.env` file in the current working directory
-3. `.env` file in the user's home directory (`~/.env`)
+2. `.env` file in the current working directory (only reads `GEMINI_API_KEY`, ignores other variables)
 
 If the key is not found in any of those, tell the user:
 
@@ -75,11 +74,15 @@ For image editing, also ask if they want to keep the original resolution/aspect 
 Once you have the prompt, model, resolution, and aspect ratio:
 
 1. Craft an optimized prompt (apply tips from `references/prompt-guide.md`)
-2. Build the command:
+2. Write the prompt to a temporary file, then pass it via `--prompt-file` (this avoids shell injection — **never pass the prompt as a CLI argument**):
 
 ```bash
+cat > /tmp/image-prompt.txt << 'PROMPT_END'
+your optimized prompt here
+PROMPT_END
+
 node "<skill-path>/scripts/generate.mjs" \
-  --prompt "your optimized prompt here" \
+  --prompt-file /tmp/image-prompt.txt \
   --model "gemini-2.0-flash-exp-image-generation" \
   --size "2K" \
   --aspect-ratio "16:9" \
@@ -87,6 +90,8 @@ node "<skill-path>/scripts/generate.mjs" \
 ```
 
 Replace `<skill-path>` with the actual path to this skill's directory.
+
+The script automatically deletes the temp prompt file after reading it.
 
 3. Run the command via Bash
 4. Report the result: file path and which model was used
@@ -101,17 +106,23 @@ When the user wants to edit an existing image:
 
 1. Confirm the image file exists (use Read tool to verify the path)
 2. Ask for edit instructions, resolution, and aspect ratio
-3. Run with the `--input-image` flag:
+3. Write prompt to temp file and run with `--input-image` flag:
 
 ```bash
+cat > /tmp/image-prompt.txt << 'PROMPT_END'
+edit instructions here
+PROMPT_END
+
 node "<skill-path>/scripts/generate.mjs" \
-  --prompt "edit instructions here" \
+  --prompt-file /tmp/image-prompt.txt \
   --model "gemini-2.0-flash-exp-image-generation" \
   --size "2K" \
   --aspect-ratio "16:9" \
   --input-image "./original.png" \
   --output "./original-edited.png"
 ```
+
+Only image files are accepted for `--input-image` (.png, .jpg, .jpeg, .webp, .gif). The script validates both the extension and the file's magic bytes.
 
 For edits, default to **Nano Banana** unless the edit adds significant text.
 

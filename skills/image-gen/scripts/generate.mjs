@@ -5,16 +5,16 @@
  * Zero external dependencies — uses Node.js built-in fetch (18+).
  *
  * Usage:
- *   node generate.mjs --prompt "a red fox" --model "gemini-2.0-flash-exp-image-generation" \
+ *   node generate.mjs --prompt-file ./prompt.txt --model "gemini-2.0-flash-exp-image-generation" \
  *     --size "2K" --aspect-ratio "16:9" --output "./fox.png"
  *
  * For image editing:
- *   node generate.mjs --prompt "make the sky dramatic" --model "gemini-2.0-flash-exp-image-generation" \
+ *   node generate.mjs --prompt-file ./prompt.txt --model "gemini-2.0-flash-exp-image-generation" \
  *     --size "2K" --aspect-ratio "16:9" --input-image "./photo.png" --output "./photo-edited.png"
  */
 
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { writeFileSync, readFileSync, existsSync, unlinkSync } from "node:fs";
+import { resolve, join, extname } from "node:path";
 
 // ---------------------------------------------------------------------------
 // Argument parsing (no deps)
@@ -33,41 +33,102 @@ function parseArgs(argv) {
 }
 
 // ---------------------------------------------------------------------------
-// Load .env file (zero-dep parser)
+// Load .env file from project root only (zero-dep parser)
 // ---------------------------------------------------------------------------
 function loadEnv() {
-  const paths = [
-    join(process.cwd(), ".env"),
-    join(process.env.HOME || "", ".env"),
-  ];
+  const envPath = join(process.cwd(), ".env");
+  if (!existsSync(envPath)) return;
 
-  for (const envPath of paths) {
-    if (existsSync(envPath)) {
-      const content = readFileSync(envPath, "utf-8");
-      for (const line of content.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) continue;
-        const eqIndex = trimmed.indexOf("=");
-        if (eqIndex === -1) continue;
-        const key = trimmed.slice(0, eqIndex).trim();
-        let value = trimmed.slice(eqIndex + 1).trim();
-        // Strip surrounding quotes
-        if ((value.startsWith('"') && value.endsWith('"')) ||
-            (value.startsWith("'") && value.endsWith("'"))) {
-          value = value.slice(1, -1);
-        }
-        if (!process.env[key]) {
-          process.env[key] = value;
-        }
-      }
-      return;
+  const content = readFileSync(envPath, "utf-8");
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIndex = trimmed.indexOf("=");
+    if (eqIndex === -1) continue;
+    const key = trimmed.slice(0, eqIndex).trim();
+    // Only load GEMINI_API_KEY — don't read other variables
+    if (key !== "GEMINI_API_KEY") continue;
+    let value = trimmed.slice(eqIndex + 1).trim();
+    // Strip surrounding quotes
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
     }
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Validate input image is an actual image file
+// ---------------------------------------------------------------------------
+const ALLOWED_IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
+const IMAGE_MAGIC_BYTES = [
+  { ext: ".png",  bytes: [0x89, 0x50, 0x4e, 0x47] },
+  { ext: ".jpg",  bytes: [0xff, 0xd8, 0xff] },
+  { ext: ".jpeg", bytes: [0xff, 0xd8, 0xff] },
+  { ext: ".webp", bytes: [0x52, 0x49, 0x46, 0x46] }, // RIFF
+  { ext: ".gif",  bytes: [0x47, 0x49, 0x46] },        // GIF
+];
+
+function validateImageFile(filePath) {
+  const ext = extname(filePath).toLowerCase();
+  if (!ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
+    console.error(
+      `Error: --input-image must be an image file (${[...ALLOWED_IMAGE_EXTENSIONS].join(", ")}). Got: ${ext || "no extension"}`
+    );
+    process.exit(1);
+  }
+
+  if (!existsSync(filePath)) {
+    console.error(`Error: Input image not found: ${filePath}`);
+    process.exit(1);
+  }
+
+  // Check magic bytes to confirm it's actually an image
+  const buffer = Buffer.alloc(8);
+  const fd = require("node:fs").openSync(filePath, "r");
+  require("node:fs").readSync(fd, buffer, 0, 8, 0);
+  require("node:fs").closeSync(fd);
+
+  const matchesAny = IMAGE_MAGIC_BYTES.some((sig) =>
+    sig.bytes.every((b, i) => buffer[i] === b)
+  );
+
+  if (!matchesAny) {
+    console.error("Error: --input-image does not appear to be a valid image file (magic bytes mismatch).");
+    process.exit(1);
   }
 }
 
 loadEnv();
 
 const args = parseArgs(process.argv);
+
+// ---------------------------------------------------------------------------
+// Read prompt from file (avoids shell injection)
+// ---------------------------------------------------------------------------
+const promptFile = args["prompt-file"];
+if (!promptFile) {
+  console.error("Error: --prompt-file is required (path to a text file containing the prompt).");
+  process.exit(1);
+}
+
+const promptFilePath = resolve(promptFile);
+if (!existsSync(promptFilePath)) {
+  console.error(`Error: Prompt file not found: ${promptFilePath}`);
+  process.exit(1);
+}
+
+const prompt = readFileSync(promptFilePath, "utf-8").trim();
+if (!prompt) {
+  console.error("Error: Prompt file is empty.");
+  process.exit(1);
+}
+
+// Clean up the temp prompt file after reading
+try { unlinkSync(promptFilePath); } catch {}
 
 // ---------------------------------------------------------------------------
 // Validate required inputs
@@ -83,16 +144,16 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-if (!args.prompt) {
-  console.error("Error: --prompt is required.");
-  process.exit(1);
-}
-
 const model = args.model || "gemini-2.0-flash-exp-image-generation";
 const size = args.size || "2K";
 const aspectRatio = args["aspect-ratio"] || "16:9";
 const outputPath = resolve(args.output || "./generated-image.png");
 const inputImagePath = args["input-image"] ? resolve(args["input-image"]) : null;
+
+// Validate input image if provided
+if (inputImagePath) {
+  validateImageFile(inputImagePath);
+}
 
 // ---------------------------------------------------------------------------
 // Map size labels to API values
@@ -116,14 +177,13 @@ function buildPayload(prompt, inputImagePath, size, aspectRatio) {
     const imageBuffer = readFileSync(inputImagePath);
     const base64Data = imageBuffer.toString("base64");
 
-    // Detect MIME type from extension
-    const ext = inputImagePath.split(".").pop().toLowerCase();
+    const ext = extname(inputImagePath).toLowerCase();
     const mimeMap = {
-      png: "image/png",
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      webp: "image/webp",
-      gif: "image/gif",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp",
+      ".gif": "image/gif",
     };
     const mimeType = mimeMap[ext] || "image/png";
 
@@ -156,7 +216,7 @@ function buildPayload(prompt, inputImagePath, size, aspectRatio) {
 async function generate() {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`;
 
-  const payload = buildPayload(args.prompt, inputImagePath, size, aspectRatio);
+  const payload = buildPayload(prompt, inputImagePath, size, aspectRatio);
 
   let response;
   try {
