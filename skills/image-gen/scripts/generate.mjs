@@ -198,15 +198,22 @@ function buildPayload(prompt, inputImagePath, size, aspectRatio) {
   // Add the text prompt
   parts.push({ text: prompt });
 
+  const config = {
+    responseModalities: ["TEXT", "IMAGE"],
+  };
+
+  // imageConfig is only supported on newer models, not gemini-2.0-flash-exp
+  const supportsImageConfig = !model.includes("gemini-2.0-flash-exp");
+  if (supportsImageConfig) {
+    config.imageConfig = {
+      aspectRatio,
+      imageSize: sizeToLabel(size),
+    };
+  }
+
   return {
     contents: [{ parts }],
-    generationConfig: {
-      responseModalities: ["TEXT", "IMAGE"],
-      imageConfig: {
-        aspectRatio,
-        imageSize: sizeToLabel(size),
-      },
-    },
+    generationConfig: config,
   };
 }
 

@@ -48,6 +48,8 @@ Examples:
 
 Tell the user which model you chose and why (one short sentence).
 
+**API note:** Resolution (`--size`) and aspect ratio (`--aspect-ratio`) are sent via `imageConfig` which is only supported on newer models (e.g., `gemini-2.5-pro-exp-03-25`). For `gemini-2.0-flash-exp-image-generation`, the script omits `imageConfig` automatically — the model will use its own defaults.
+
 ## Always Ask Before Generating
 
 Before generating any image, ask the user for:
