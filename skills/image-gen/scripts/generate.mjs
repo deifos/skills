@@ -13,7 +13,7 @@
  *     --size "2K" --aspect-ratio "16:9" --input-image "./photo.png" --output "./photo-edited.png"
  */
 
-import { writeFileSync, readFileSync, existsSync, unlinkSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, unlinkSync, openSync, readSync, closeSync } from "node:fs";
 import { resolve, join, extname } from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -88,9 +88,9 @@ function validateImageFile(filePath) {
 
   // Check magic bytes to confirm it's actually an image
   const buffer = Buffer.alloc(8);
-  const fd = require("node:fs").openSync(filePath, "r");
-  require("node:fs").readSync(fd, buffer, 0, 8, 0);
-  require("node:fs").closeSync(fd);
+  const fd = openSync(filePath, "r");
+  readSync(fd, buffer, 0, 8, 0);
+  closeSync(fd);
 
   const matchesAny = IMAGE_MAGIC_BYTES.some((sig) =>
     sig.bytes.every((b, i) => buffer[i] === b)
